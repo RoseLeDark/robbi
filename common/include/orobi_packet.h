@@ -14,6 +14,10 @@
 #define OROBI_NONCE_COUNTER_THRESHOLD     0xFFFFFFFF  // Schwelle für Nonce-Reset
 #define OROBI_ERROR_BUFFER_SIZE           128
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum {
     OROBI_OK = 0,
     OROBI_ERROR_INVALID_INPUT = -1,
@@ -76,6 +80,8 @@ orobi_error_t    orobi_encrypt_packet(orobi_secure_t* ctx, const orobi_packet_t*
 // Decrypt and validate
 orobi_error_t    orobi_decrypt_packet(orobi_secure_t* ctx, const orobi_crypt_packet_t* crypt_packet, orobi_packet_t* packet, const unsigned char* their_public_key) ;
 
-
+#ifdef __cplusplus
+}
+#endif
 
 #endif // __LIBOPENROBI_SECURE_H__
