@@ -168,6 +168,7 @@ orobi_error_t orobi_create_packet(orobi_secure_t* ctx, orobi_packet_t* packet,
     
     packet->packet_hash = orobi_murmur3_64(hash_data, hash_size, ctx->id.high);
     free(hash_data);
+    hash_data = NULL;
     
     ctx->last_status = OROBI_OK;
     return OROBI_OK;
@@ -201,13 +202,14 @@ orobi_error_t orobi_encrypt_packet(orobi_secure_t* ctx, const orobi_packet_t* pa
     if (crypto_box(crypt_packet->encrypted_data, temp, 
                   sizeof(packet_t) + crypto_box_ZEROBYTES,
                   packet->nonce.bytes, their_public_key, ctx->secret_key) != 0) {
-        free(temp);
+        free(temp); temp = NULL;
         ctx->last_status = OROBI_ERROR_ENCRYPTION_FAILED ;
         snprintf(ctx->last_error, OROBI_ERROR_BUFFER_SIZE, "Encryption failed");
         return ctx->last_status;
     }
     
     free(temp);
+    temp = NULL;
     
     // Erstelle Hash der verschlüsselten Daten
     crypt_packet->crypt_hash = orobi_murmur3_64(crypt_packet->encrypted_data,
@@ -268,6 +270,7 @@ orobi_error_t orobi_decrypt_packet(orobi_secure_t* ctx,
     // Kopiere entschlüsselte Daten
     memcpy(packet, temp + crypto_box_ZEROBYTES, sizeof(packet_t));
     free(temp);
+    temp = NULL;
     
     // Validiere Paket
     uint8_t* hash_data = malloc(packet->message_size + sizeof(uint16_t) + 
