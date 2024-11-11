@@ -66,13 +66,16 @@ typedef struct {
     orobi_error_t         last_status;
 } orobi_secure_t;
 
-void orobi_secure_init(orobi_secure_t* ctx, uint128_t id, const unsigned char* public_key, const unsigned char* secret_key);
+uint64_t         orobi_murmur3_64(const void* data, size_t len, uint64_t seed);
+
+void             orobi_secure_init(orobi_secure_t* ctx, uint128_t id, const unsigned char* public_key, const unsigned char* secret_key);
+orobi_error_t    orobi_secure_close(orobi_secure_t* ctx);
+orobi_error_t    orobi_create_packet(orobi_secure_t* ctx, orobi_packet_t* packet, const char* message, uint16_t size);
+// Verschlüsselt ein Paket mit erweiterten Sicherheitsfeatures
+orobi_error_t    orobi_encrypt_packet(orobi_secure_t* ctx, const orobi_packet_t* packet, orobi_crypt_packet_t* crypt_packet, const unsigned char* their_public_key);
+// Decrypt and validate
+orobi_error_t    orobi_decrypt_packet(orobi_secure_t* ctx, const orobi_crypt_packet_t* crypt_packet, orobi_packet_t* packet, const unsigned char* their_public_key) ;
 
 
-
-uint8_t orobi_create_packet(packet_t* packet, const char* message, uint16_t size, uint64_t api_key, uint64_t id_high);
-uint8_t orobi_validate_packet(const packet_t* packet, uint64_t id_high);
-uint8_t orobi_encrypt_packet(const packet_t* packet, crypt_packet_t* crypt_packet, const unsigned char* their_public_key, const unsigned char* our_secret_key);
-uint8_t orobi_decrypt_packet(const crypt_packet_t* crypt_packet, packet_t* packet, const unsigned char* their_public_key, const unsigned char* our_secret_key);
 
 #endif // __LIBOPENROBI_SECURE_H__
