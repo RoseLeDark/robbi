@@ -1,13 +1,20 @@
 #include "orobi_packet.h"
 #include "tweetnacl.h"
-//#include "esp_system.h"
+
+
+#ifdef ESP32
+#include "esp_system.h"
+#define OROBI_RANDOM() esp_random()
+#else
+OROBI_RANDOM() rand()
+#endif
 
 static void __orobi_generate_nonce(orobi_secure_nonce_t* nonce) {
     // Erhöhe Counter
     nonce->counter++;
     
     // Reset Counter wenn Schwelle erreicht
-    if (nonce->counter >= NONCE_COUNTER_THRESHOLD) {
+    if (nonce->counter >= OROBI_NONCE_COUNTER_THRESHOLD) {
         nonce->counter = 0;
     }
     
@@ -16,7 +23,7 @@ static void __orobi_generate_nonce(orobi_secure_nonce_t* nonce) {
     
     // Generiere zufällige Bytes
     for (int i = 0; i < crypto_box_NONCEBYTES - 8; i++) {
-        nonce->bytes[i] = (unsigned char)esp_random();
+        nonce->bytes[i] = (unsigned char)OROBI_RANDOM(); // esp_random();
     }
     
     // Füge Counter in die letzten 8 Bytes ein
