@@ -135,7 +135,7 @@ orobi_error_t orobi_command_status_tostring(const orobi_command_status_t* head, 
     size_t offset = 0;
     const orobi_command_status_t* current = head;
     while (current) {
-        int len = snprintf(out + offset, out_size - offset, "#%d:%d:%ld#",
+        int len = snprintf(out + offset, out_size - offset, "S%d%d%ld#",
                            current->seq_nr, current->status, current->timestamp);
         if (len < 0 || (size_t)len >= (out_size - offset)) {
             return OROBI_ERROR_BUFFER_OVERFLOW;
