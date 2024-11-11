@@ -1,9 +1,48 @@
 #include "secure_comm.h"
 #include "tweetnacl.h"
 
+static void __orobi_generate_nonce(orobi_secure_nonce_t* nonce) {
+    // Erhöhe Counter
+    nonce->counter++;
+    
+    // Reset Counter wenn Schwelle erreicht
+    if (nonce->counter >= NONCE_COUNTER_THRESHOLD) {
+        nonce->counter = 0;
+    }
+    
+    // Aktualisiere Zeitstempel
+    nonce->timestamp = time(NULL);
+    
+    // Generiere zufällige Bytes
+    for (int i = 0; i < crypto_box_NONCEBYTES - 8; i++) {
+        nonce->bytes[i] = (unsigned char)esp_random();
+    }
+    
+    // Füge Counter in die letzten 8 Bytes ein
+    memcpy(&nonce->bytes[crypto_box_NONCEBYTES - 8], &nonce->counter, sizeof(uint32_t));
+    memcpy(&nonce->bytes[crypto_box_NONCEBYTES - 4], &nonce->timestamp, sizeof(uint32_t));
+}
+
+// Überprüft, ob eine Nonce bereits verwendet wurde
+static bool __orobi_is_nonce_valid(const orobi_secure_t* ctx, const orobi_secure_nonce_t* nonce) {
+    // Prüfe Zeitstempel
+    time_t current_time = time(NULL);
+    if (current_time - nonce->timestamp > OROBI_MAX_PACKET_AGE_SEC) {
+        return false;
+    }
+    
+    // Prüfe Counter
+    if (nonce->counter <= ctx->last_seen_nonce.counter &&
+        nonce->timestamp <= ctx->last_seen_nonce.timestamp) {
+        return false;
+    }
+    
+    return true;
+}
+
 // Murmur3 Hash Implementation
 // Verbesserte Murmur3 Hash Implementation mit Seed-Mixing
-uint64_t murmur3_64(const void* data, size_t len, uint64_t seed) {
+uint64_t orobi_murmur3_64(const void* data, size_t len, uint64_t seed) {
     const uint64_t m = 0xc6a4a7935bd1e995ULL;
     const int r = 47;
     
@@ -60,27 +99,98 @@ void orobi_secure_init(orobi_secure_t* ctx, uint128_t id, const unsigned char* p
     ctx->last_status = OROBI_OK;
 }
 
-// Erstellt ein Paket und berechnet den Hash
-void create_packet(packet_t* packet, const char* message, uint16_t size, uint64_t api_key, uint64_t id_high) {
-    memset(packet, 0, sizeof(packet_t));
+// Erstellt ein Paket mit erweiterten Sicherheitsfeatures
+orobi_error_t orobi_create_packet(orobi_secure_t* ctx, orobi_packet_t* packet, 
+                            const char* message, uint16_t size) {
+    if (!ctx || !packet || !message || size > OROBI_MAXMESSAGESIZE ) {
+        ctx->last_status = OROBI_ERROR_INVALID_INPUT ;
+        snprintf(ctx->last_error, OROBI_ERROR_BUFFER_SIZE, "Invalid input parameters");
+        return ctx->last_status;
+    }
+
+    memset(packet, 0, sizeof(orobi_packet_t));
     memcpy(packet->message, message, size);
     packet->message_size = size;
-    packet->api_key = api_key;
+    packet->api_key = ctx->id.low;
+    packet->timestamp = time(NULL);
     
-    // Hash aus Nachricht + Größe + API-Key mit id_high
-    uint8_t hash_data[MAX_MESSAGE_SIZE + sizeof(uint16_t) + sizeof(uint64_t)];
+    // Generiere neue Nonce
+    __orobi_generate_nonce(&packet->nonce);
+    
+    // Erstelle Hash aus allen relevanten Feldern
+    uint8_t* hash_data = malloc(size + sizeof(uint16_t) + sizeof(uint64_t) + 
+                               sizeof(time_t) + crypto_box_NONCEBYTES);
+    if (!hash_data) {
+        ctx->last_status = OROBI_ERROR_OUTOFMEM;
+        snprintf(ctx->last_error, OROBI_ERROR_BUFFER_SIZE, "Memory allocation failed");
+        return ctx->last_status;
+    }
+    
     size_t hash_size = 0;
-    
     memcpy(hash_data + hash_size, message, size);
     hash_size += size;
     memcpy(hash_data + hash_size, &size, sizeof(uint16_t));
     hash_size += sizeof(uint16_t);
-    memcpy(hash_data + hash_size, &api_key, sizeof(uint64_t));
+    memcpy(hash_data + hash_size, &ctx->id_low, sizeof(uint64_t));
     hash_size += sizeof(uint64_t);
+    memcpy(hash_data + hash_size, &packet->timestamp, sizeof(time_t));
+    hash_size += sizeof(time_t);
+    memcpy(hash_data + hash_size, packet->nonce.bytes, crypto_box_NONCEBYTES);
+    hash_size += crypto_box_NONCEBYTES;
     
-    packet->packet_hash = murmur3_64(hash_data, hash_size, id_high);
+    packet->packet_hash = orobi_murmur3_64(hash_data, hash_size, ctx->id_high);
+    free(hash_data);
+    
+    ctx->last_status = OROBI_OK;
+    return OROBI_OK;
 }
 
+// Verschlüsselt ein Paket mit erweiterten Sicherheitsfeatures
+secure_status_t orobi_encrypt_packet(orobi_secure_t* ctx, const orobi_packet_t* packet,
+                             orobi_crypt_packet_t* crypt_packet,
+                             const unsigned char* their_public_key) {
+    if (!ctx || !packet || !crypt_packet || !their_public_key) {
+        ctx->last_status = OROBI_ERROR_INVALID_INPUT;
+        snprintf(ctx->last_error, OROBI_ERROR_BUFFER_SIZE, "Invalid input parameters");
+        return ctx->last_status;
+    }
+
+    // Kopiere Nonce
+    memcpy(&crypt_packet->nonce, &packet->nonce, sizeof(secure_nonce_t));
+    
+    // Vorbereitung der Verschlüsselung
+    unsigned char* temp = malloc(sizeof(orobi_packet_t) + crypto_box_ZEROBYTES);
+    if (!temp) {
+        ctx->last_status = OROBI_ERROR_OUTOFMEM;
+        snprintf(ctx->last_error, OROBI_ERROR_BUFFER_SIZE, "Memory allocation failed");
+        return ctx->last_status;
+    }
+    
+    memset(temp, 0, crypto_box_ZEROBYTES);
+    memcpy(temp + crypto_box_ZEROBYTES, packet, sizeof(orobi_packet_t));
+    
+    // Verschlüsseln
+    if (crypto_box(crypt_packet->encrypted_data, temp, 
+                  sizeof(packet_t) + crypto_box_ZEROBYTES,
+                  packet->nonce.bytes, their_public_key, ctx->secret_key) != 0) {
+        free(temp);
+        ctx->last_status = OROBI_ERROR_ENCRYPTION_FAILED ;
+        snprintf(ctx->last_error, OROBI_ERROR_BUFFER_SIZE, "Encryption failed");
+        return ctx->last_status;
+    }
+    
+    free(temp);
+    
+    // Erstelle Hash der verschlüsselten Daten
+    crypt_packet->crypt_hash = orobi_murmur3_64(crypt_packet->encrypted_data,
+                                         sizeof(crypt_packet->encrypted_data),
+                                         OROBI_MURMUR_SEED);
+    
+    ctx->last_status = SECURE_OK;
+    return OROBI_OK;
+}
+
+/*
 // Validiert ein empfangenes Paket
 bool validate_packet(const packet_t* packet, uint64_t id_high) {
     uint8_t hash_data[MAX_MESSAGE_SIZE + sizeof(uint16_t) + sizeof(uint64_t)];
@@ -148,3 +258,4 @@ bool decrypt_packet(const crypt_packet_t* crypt_packet, packet_t* packet,
     memcpy(packet, temp + crypto_box_ZEROBYTES, sizeof(packet_t));
     return true;
 }
+*/
