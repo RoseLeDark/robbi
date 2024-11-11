@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO.Ports;
 
 public struct OrobiCommandStatus
 {
@@ -18,7 +19,7 @@ public enum OrobiCommandStatusType
 }
 
 public class OrobiGroundstation
-{    
+{
     public struct Uint128
     {
         public ulong Low;
@@ -29,27 +30,32 @@ public class OrobiGroundstation
     {
         public Uint128 Id;
         public byte[] PublicKey; // crypto_box_PUBLICKEYBYTES
-        public String Name;
+        public string Name;
     }
 
     private List<OrobiRobot> robots;
     private byte[] groundPublicKey;
     private byte[] groundSecretKey;
+    private SerialPort serialPort;
+    private string name;
 
-    public OrobiGroundstation(byte[] groundPublicKey, byte[] groundSecretKey)
+    public OrobiGroundstation(byte[] groundPublicKey, byte[] groundSecretKey, string serialPortName, string name)
     {
         robots = new List<OrobiRobot>();
         this.groundPublicKey = groundPublicKey;
         this.groundSecretKey = groundSecretKey;
+        this.name = name;
+        this.serialPort = new SerialPort(serialPortName, 115200, Parity.None, 8, StopBits.One);
+        this.serialPort.Open();
     }
 
-    public void AddRobot(Uint128 id, byte[] publicKey, String name)
+    public void AddRobot(Uint128 id, byte[] publicKey, string name)
     {
         OrobiRobot newRobot = new OrobiRobot
         {
             Id = id,
             PublicKey = publicKey,
-            Name = name;
+            Name = name
         };
         robots.Add(newRobot);
     }
@@ -89,9 +95,15 @@ public class OrobiGroundstation
         return statuses;
     }
 
+    public void SendPcPublicKey(byte[] pcPublicKey)
+    {
+        string pcPublicKeyHex = BitConverter.ToString(pcPublicKey).Replace("-", "").ToLowerInvariant();
+        string jsonStr = $"{{\"orob_ground_key\":\"{pcPublicKeyHex}\", \"Name\": \"{name}\"}}";
+        serialPort.WriteLine(jsonStr);
+    }
+
     public void Clear()
     {
         robots.Clear();
     }
 }
-
