@@ -2,8 +2,23 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 
-public class OrobiGroundstation
+public struct OrobiCommandStatus
 {
+    public byte SeqNr;
+    public OrobiCommandStatusType Status;
+    public DateTime Timestamp;
+}
+
+public enum OrobiCommandStatusType
+{
+    Ok,
+    Error,
+    NoData,
+    InvalidCommand
+}
+
+public class OrobiGroundstation
+{    
     public struct Uint128
     {
         public ulong Low;
@@ -14,23 +29,27 @@ public class OrobiGroundstation
     {
         public Uint128 Id;
         public byte[] PublicKey; // crypto_box_PUBLICKEYBYTES
-        public byte[] SecretKey; // crypto_box_SECRETKEYBYTES
+        public String Name;
     }
 
     private List<OrobiRobot> robots;
+    private byte[] groundPublicKey;
+    private byte[] groundSecretKey;
 
-    public OrobiGroundstation()
+    public OrobiGroundstation(byte[] groundPublicKey, byte[] groundSecretKey)
     {
         robots = new List<OrobiRobot>();
+        this.groundPublicKey = groundPublicKey;
+        this.groundSecretKey = groundSecretKey;
     }
 
-    public void AddRobot(Uint128 id, byte[] publicKey, byte[] secretKey)
+    public void AddRobot(Uint128 id, byte[] publicKey, String name)
     {
         OrobiRobot newRobot = new OrobiRobot
         {
             Id = id,
             PublicKey = publicKey,
-            SecretKey = secretKey
+            Name = name;
         };
         robots.Add(newRobot);
     }
@@ -76,17 +95,3 @@ public class OrobiGroundstation
     }
 }
 
-public struct OrobiCommandStatus
-{
-    public byte SeqNr;
-    public OrobiCommandStatusType Status;
-    public DateTime Timestamp;
-}
-
-public enum OrobiCommandStatusType
-{
-    Ok,
-    Error,
-    NoData,
-    InvalidCommand
-}
