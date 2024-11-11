@@ -5,9 +5,13 @@
 #ifdef ESP32
 #include "esp_system.h"
 #define OROBI_RANDOM() esp_random()
+#elif defined(LINUX)
+#include <stdlib.h>
+#define OROBI_RANDOM() rand()
 #else
-OROBI_RANDOM() rand()
+#define OROBI_RANDOM() rand()
 #endif
+
 
 static void __orobi_generate_nonce(orobi_secure_nonce_t* nonce) {
     // Erhöhe Counter
