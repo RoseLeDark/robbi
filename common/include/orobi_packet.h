@@ -6,7 +6,7 @@
 #include <string.h>
 #include <time.h>
 #include "tweetnacl.h"
-#include "esp_system.h"
+#include "orobi_common.h"
 
 #define OROBI_MAXMESSAGESIZE              4096
 #define OROBI_MURMUR_SEED                 42
@@ -18,17 +18,6 @@
 extern "C" {
 #endif
 
-typedef enum {
-    OROBI_OK = 0,
-    OROBI_ERROR_INVALID_INPUT = -1,
-    OROBI_ERROR_PACKET_TOO_OLD = -2,
-    OROBI_ERROR_NONCE_REPLAY = -3,
-    OROBI_ERROR_ENCRYPTION_FAILED = -4,
-    OROBI_ERROR_DECRYPTION_FAILED = -5,
-    OROBI_ERROR_HASH_MISMATCH = -6,
-    OROBI_ERROR_PACKET_VALIDATION_FAILED = -7,
-    OROBI_ERROR_MEMORY = -8
-} orobi_error_t;
 
 // Erweiterter Nonce-Struct mit Zeitstempel und Counter
 typedef struct {
@@ -53,13 +42,6 @@ typedef struct {
     orobi_secure_nonce_t     nonce;    // Kopie der Nonce für Empfänger
 } orobi_crypt_packet_t;
 
-typedef union {
-    struct {
-        uint64_t              high;
-        uint64_t              low;
-    };
-    uint64_t    key[2];
-} uint128_t;
 // Kontext-Struktur für den Zustand der Kommunikation
 typedef struct {
     uint128_t             id;
