@@ -1,23 +1,19 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
+using System.Globalization;
 
 public class OrobiGroundstation
 {
-    [StructLayout(LayoutKind.Sequential)]
     public struct Uint128
     {
         public ulong Low;
         public ulong High;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
     public struct OrobiRobot
     {
         public Uint128 Id;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
         public byte[] PublicKey; // crypto_box_PUBLICKEYBYTES
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
         public byte[] SecretKey; // crypto_box_SECRETKEYBYTES
     }
 
@@ -44,10 +40,34 @@ public class OrobiGroundstation
         return $"A{compass:000}{motor:00}{durationMs:0000}#";
     }
 
-    public OrobiCommandStatus ProcessResponse(string responseStr)
+    public List<OrobiCommandStatus> ProcessResponse(string responseStr)
     {
-        // Implementiere die Logik zum Verarbeiten der Antwort und zum Aktualisieren des Status
-        return new OrobiCommandStatus();
+        List<OrobiCommandStatus> statuses = new List<OrobiCommandStatus>();
+        string[] statusStrings = responseStr.Split(new[] { '#' }, StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var statusStr in statusStrings)
+        {
+            if (statusStr.StartsWith("S"))
+            {
+                string[] parts = statusStr.Substring(1).Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 3)
+                {
+                    if (byte.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out byte seqNr) &&
+                        Enum.TryParse(parts[1], out OrobiCommandStatusType status) &&
+                        long.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out long timestamp))
+                    {
+                        statuses.Add(new OrobiCommandStatus
+                        {
+                            SeqNr = seqNr,
+                            Status = status,
+                            Timestamp = DateTimeOffset.FromUnixTimeSeconds(timestamp).DateTime
+                        });
+                    }
+                }
+            }
+        }
+
+        return statuses;
     }
 
     public void Clear()
