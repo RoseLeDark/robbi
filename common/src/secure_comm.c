@@ -208,7 +208,7 @@ orobi_error_t orobi_encrypt_packet(orobi_secure_t* ctx, const orobi_packet_t* pa
 }
 
 // Entschlüsselt und validiert ein Paket
-orobi_error_t decrypt_and_validate_packet(orobi_secure_t* ctx,
+orobi_error_t orobi_decrypt_packet(orobi_secure_t* ctx,
                                           const orobi_crypt_packet_t* crypt_packet,
                                           orobi_packet_t* packet,
                                           const unsigned char* their_public_key) {
