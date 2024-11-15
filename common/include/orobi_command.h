@@ -14,56 +14,63 @@ typedef enum orobi_command_status {
     OROBI_COMMAND_STATUS_INVALID_COMMAND
 } orobi_command_status_t;
 
-#define OROBI_COMMAND_COMPASS          000    // 000-360 sind compass daten für orobi_command
-#define OROBI_COMMAND_SEND_SENSOR      365    // Sende Sensor Daten
-#define OROBI_COMMAND_SEND_STATUS      370    // Sende Status Daten (orobi_command_status_tostring)
-#define OROBI_COMMAND_SEND_AKKU        380    // Sende Akku Daten: ("CAKKU%#")
-#define OROBI_COMMAND_LOCK_MODE        390    // Gehe in Lock Modus und warte
-#define OROBI_COMMAND_DEBUG            395    // Gehe in Debug Modus - Deaktiviere Motorshield und sende daten an ESP32 -> Bodenstation
-#define OROBI_COMMAND_MAIN_MODE        391    // Gehe zurück in Normalen Modus
-#define OROBI_COMMAND_RUN_TICKET       400    // Baue Direkte verbindung zu ein anderen Gerät - TicketID ist MSMS Bereich, erfrage IP von Bodenstation
-#define OROBI_COMMAND_DEL_TICKET       401    // Lösche Ticket im Buffer
-#define OROBI_COMMAND_RETRY_TICKET     402    // Versuche Ticket erneut auszuführen
-#define OROBI_COMMAND_ALARM            999    // ALARM von Bodenstation
+
+typedef enum orobi_command_packet {
+    OROBI_COMMAND_MOTORDATA,            // orobi_motordata_t motor
+    OROBI_COMMAND_STARTDATA,            // orobi_motordata_t start
+    OROBI_COMMAND_INT,                  // uint32_t value
+    OROBI_COMMAND_FLOAT,                // float fvalue
+    OROBI_COMMAND_STRING,               // char string[16]
+    OROBI_COMMAND_USER                  // void* packet;
+}orobi_command_packet_t;
+
+typedef struct orobi_motordata {
+    uint16_t speed;
+    uint16_t rotation;
+    bool     buttons[4];        // 0: break, 1: light on/off, 2: resaviert, 3: reserved
+} orobi_motordata_t;
+
+typedef struct orobi_start {
+    char wifi_ssid[16];
+    char wifi_passwd[16];
+    uint8_t rw_port;
+    uint32_t key_station[2]; // 0: low und 1: high Word (low: public_key, high: private_key)
+    uint16_t api_key;
+} orobi_start_t;
 
 typedef struct orobi_command {
-    uint16_t compass;
-    uint8_t motor;
-    uint16_t duration_ms;
-    uint8_t seq_nr;
-    struct orobi_command* next;
+    orobi_command_packet_t type;
+    union {
+        orobi_motordata_t motor;
+        orobi_start_t start;
+        uint32_t value;
+        float fvalue;
+        char string[16];
+        void* packet;
+    };
+    uint32_t hash;        /// < Hash aus: PC -> esp32: L & H von PC, ESP32 -> PC: L & H von ESP32 
+    uint16_t lowWord;     /// < PC -> esp32: L von PC, ESP32 -> PC: L von ESP32 
 } orobi_command_t;
 
-typedef struct orobi_command_status {
-    uint8_t seq_nr;
-    orobi_command_status_t status;
-    time_t timestamp;
-    struct orobi_command_status* next;
-} orobi_command_status_t;
+#define OROBI_COMMAND_SIZE sizeof(orobi_command_t)
 
-// Funktion zum Parsen eines Steuerstrings
-orobi_error_t orobi_command_parse(const char* command_str, orobi_command_t* command);
+typedef struct orobi_network_packet {        // ESP32 <-> PC
+    uint8_t     seq_nr;
+    uint16_t    api_key;
+    union {
+        void*             raw_packet;
+        orobi_command_t*  packet; // <--- To Mega
+    };
+    char        compressed : 1;
+    uint32_t    compress_size;        
+    uint32_t    hash;            // Key muss in esp32 programm und PC gleich sein
+} orobi_netpacket_t;
 
 // Funktion zum Überprüfen der Kommandos
 orobi_error_t orobi_command_validate(const orobi_command_t* command);
 
-// Funktion zum Erstellen eines Steuerstrings
-orobi_error_t orobi_command_tostring(const orobi_command_t* command, char* command_str, size_t command_str_size);
-
-// Funktion zum Parsen einer Befehlssequenz
-orobi_error_t orobi_command_parse_seq(const char* commands_str, orobi_command_t** head);
-
-// Funktion zum Erstellen eines Statusobjekts
-orobi_error_t orobi_command_status_create(const orobi_command_t* command, orobi_command_status_t* status);
-
-// Funktion zum Setzen eines Statusobjekts
-orobi_error_t orobi_command_status_set(orobi_command_status_t** head, const orobi_command_status_t* status);
-
-// Funktion zum Konvertieren des Status in einen String
-orobi_error_t orobi_command_status_tostring(const orobi_command_status_t* head, char* out, size_t out_size);
-
-// Funktion zum Freigeben von Statusobjekten
-orobi_error_t orobi_command_status_free(orobi_command_status_t* command);
+orobi_error_t orobi_netpacket_parse(void* data, size_t size, orobi_netpacket_t* out);
+orobi_error_t orobi_netpacket_validate(const orobi_netpacket_t* net);
 
 #ifdef __cplusplus
 }
